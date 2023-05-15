@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{info, warn};
+use log::info;
 use octocrab::OctocrabBuilder;
 use redis::AsyncCommands;
 use url::Url;
@@ -43,23 +43,14 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     let cache_key = format!("{}/{}", owner, repo);
 
     let kv_url = std::env::var("KV_URL")?.replace("redis://", "rediss://");
-    let mut redis_conn = redis::Client::open(kv_url)?.get_async_connection().await;
+    let mut redis_conn = redis::Client::open(kv_url)?.get_async_connection().await?;
 
-    if redis_conn.is_ok() {
-        if let Ok(first_commit_url) = redis_conn
-            .as_mut()
-            .unwrap()
-            .get::<_, String>(&cache_key)
-            .await
-        {
-            info!("Cache hit: {}", &cache_key);
-            return Ok(Response::builder()
-                .status(StatusCode::MOVED_PERMANENTLY)
-                .header("Location", first_commit_url)
-                .body(().into())?);
-        }
-    } else {
-        warn!("Failed to connect to Redis");
+    if let Ok(first_commit_url) = redis_conn.get::<_, String>(&cache_key).await {
+        info!("Cache hit: {}", &cache_key);
+        return Ok(Response::builder()
+            .status(StatusCode::MOVED_PERMANENTLY)
+            .header("Location", first_commit_url)
+            .body(().into())?);
     }
 
     info!("Cache miss: {}", &cache_key);
@@ -69,13 +60,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     let first_commit_url = get_first_commit(&crab, owner, repo).await?;
 
-    if redis_conn.is_ok() {
-        redis_conn
-            .as_mut()
-            .unwrap()
-            .set(&cache_key, &first_commit_url)
-            .await?;
-    }
+    redis_conn.set(&cache_key, &first_commit_url).await?;
 
     Ok(Response::builder()
         .status(StatusCode::MOVED_PERMANENTLY)
