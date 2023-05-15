@@ -1,0 +1,25 @@
+[package]
+name = "git-first"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.71"
+chrono = "0.4.24"
+env_logger = "0.10.0"
+log = "0.4.17"
+octocrab = "0.21.0"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
+tokio = "1.28.1"
+vercel_runtime = "0.3.4"
+
+[[bin]]
+name = "cli"
+path = "src/cli.rs"
+
+[[bin]]
+name = "server"
+path = "src/api.rs"
