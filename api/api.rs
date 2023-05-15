@@ -1,6 +1,8 @@
 use anyhow::Result;
-use log::info;
+use log::{info, warn};
 use octocrab::OctocrabBuilder;
+use redis::AsyncCommands;
+use url::Url;
 use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
 
 use git_first::get_first_commit;
@@ -15,6 +17,7 @@ async fn main() -> Result<(), Error> {
             Ok(res) => Ok(res),
             Err(e) => Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header("Content-Type", "text/plain")
                 .body(Body::from(format!("Error: {}", e)))?),
         }
     };
@@ -25,15 +28,61 @@ async fn main() -> Result<(), Error> {
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     info!("Request: {:?}", req);
 
-    let url = req.uri().to_string();
-    let paths: Vec<&str> = url.split('/').collect();
+    let url = Url::parse(&req.uri().to_string())?;
+    let paths: Vec<&str> = url.path().trim_matches('/').split('/').collect();
+    if paths.len() != 2 {
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("Content-Type", "text/plain")
+            .body(Body::from(
+                "Try https://git-first-commit.vercel.app/{owner}/{repo}\n",
+            ))?);
+    }
+
     let (owner, repo) = (paths[paths.len() - 2], paths[paths.len() - 1]);
+    let cache_key = format!("{}/{}", owner, repo);
+
+    let mut kv_url = std::env::var("KV_URL").unwrap();
+    kv_url = kv_url.replace("redis://", "rediss://");
+    info!("KV_URL: {}", kv_url);
+    let mut redis_conn = redis::Client::open(kv_url)?.get_async_connection().await;
+
+    if redis_conn.is_ok() {
+        match redis_conn
+            .as_mut()
+            .unwrap()
+            .get::<_, String>(cache_key.clone())
+            .await
+        {
+            Ok(first_commit_url) => {
+                info!("Cache hit: {}", cache_key);
+                return Ok(Response::builder()
+                    .status(StatusCode::FOUND)
+                    .header("Location", first_commit_url)
+                    .body(().into())?);
+            }
+            Err(_) => {}
+        }
+    } else {
+        warn!("Failed to connect to Redis");
+    }
+
+    info!("Cache miss: {}", cache_key);
     let crab = OctocrabBuilder::new()
         .personal_token(std::env::var("GITHUB_TOKEN").unwrap())
         .build()
         .unwrap();
 
     let first_commit_url = get_first_commit(&crab, owner, repo).await?;
+
+    if redis_conn.is_ok() {
+        redis_conn
+            .as_mut()
+            .unwrap()
+            .set(cache_key.clone(), first_commit_url.clone())
+            .await?;
+    }
+
     Ok(Response::builder()
         .status(StatusCode::FOUND)
         .header("Location", first_commit_url)
