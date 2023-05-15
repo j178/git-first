@@ -44,7 +44,6 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     let mut kv_url = std::env::var("KV_URL").unwrap();
     kv_url = kv_url.replace("redis://", "rediss://");
-    info!("KV_URL: {}", kv_url);
     let mut redis_conn = redis::Client::open(kv_url)?.get_async_connection().await;
 
     if redis_conn.is_ok() {

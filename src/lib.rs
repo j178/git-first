@@ -47,12 +47,12 @@ pub async fn get_first_commit(crab: &Octocrab, owner: &str, repo: &str) -> Resul
     let total_count = resp
         .pointer("/data/repository/defaultBranchRef/target/history/totalCount")
         .and_then(|v| v.as_i64())
-        .ok_or_else(|| anyhow!("total count not found"))? as usize;
+        .ok_or_else(|| anyhow!("repo {owner}/{repo} not found"))? as usize;
 
     let page_info: PageInfo = resp
         .pointer("/data/repository/defaultBranchRef/target/history/pageInfo")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .ok_or_else(|| anyhow!("page info not found"))?;
+        .ok_or_else(|| anyhow!("fetch commit history failed"))?;
 
     if page_info.has_next_page {
         let mut end_cursor = page_info.end_cursor.split(' ').next().unwrap().to_string();
