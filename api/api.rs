@@ -42,35 +42,30 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     let (owner, repo) = (paths[paths.len() - 2], paths[paths.len() - 1]);
     let cache_key = format!("{}/{}", owner, repo);
 
-    let mut kv_url = std::env::var("KV_URL").unwrap();
-    kv_url = kv_url.replace("redis://", "rediss://");
+    let kv_url = std::env::var("KV_URL")?.replace("redis://", "rediss://");
     let mut redis_conn = redis::Client::open(kv_url)?.get_async_connection().await;
 
     if redis_conn.is_ok() {
-        match redis_conn
+        if let Ok(first_commit_url) = redis_conn
             .as_mut()
             .unwrap()
-            .get::<_, String>(cache_key.clone())
+            .get::<_, String>(&cache_key)
             .await
         {
-            Ok(first_commit_url) => {
-                info!("Cache hit: {}", cache_key);
-                return Ok(Response::builder()
-                    .status(StatusCode::MOVED_PERMANENTLY)
-                    .header("Location", first_commit_url)
-                    .body(().into())?);
-            }
-            Err(_) => {}
+            info!("Cache hit: {}", &cache_key);
+            return Ok(Response::builder()
+                .status(StatusCode::MOVED_PERMANENTLY)
+                .header("Location", first_commit_url)
+                .body(().into())?);
         }
     } else {
         warn!("Failed to connect to Redis");
     }
 
-    info!("Cache miss: {}", cache_key);
+    info!("Cache miss: {}", &cache_key);
     let crab = OctocrabBuilder::new()
-        .personal_token(std::env::var("GITHUB_TOKEN").unwrap())
-        .build()
-        .unwrap();
+        .personal_token(std::env::var("GITHUB_TOKEN")?)
+        .build()?;
 
     let first_commit_url = get_first_commit(&crab, owner, repo).await?;
 
@@ -78,12 +73,12 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
         redis_conn
             .as_mut()
             .unwrap()
-            .set(cache_key.clone(), first_commit_url.clone())
+            .set(&cache_key, &first_commit_url)
             .await?;
     }
 
     Ok(Response::builder()
         .status(StatusCode::MOVED_PERMANENTLY)
-        .header("Location", first_commit_url)
+        .header("Location", &first_commit_url)
         .body(().into())?)
 }
