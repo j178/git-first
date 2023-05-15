@@ -57,7 +57,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
             Ok(first_commit_url) => {
                 info!("Cache hit: {}", cache_key);
                 return Ok(Response::builder()
-                    .status(StatusCode::FOUND)
+                    .status(StatusCode::MOVED_PERMANENTLY)
                     .header("Location", first_commit_url)
                     .body(().into())?);
             }
@@ -84,7 +84,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     }
 
     Ok(Response::builder()
-        .status(StatusCode::FOUND)
+        .status(StatusCode::MOVED_PERMANENTLY)
         .header("Location", first_commit_url)
         .body(().into())?)
 }
