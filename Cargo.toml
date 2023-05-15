@@ -22,4 +22,4 @@ path = "src/cli.rs"
 
 [[bin]]
 name = "server"
-path = "src/api.rs"
+path = "api/api.rs"

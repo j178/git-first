@@ -2,7 +2,7 @@
 
 Takes you to the first commit of a repository.
 
-Go to https://git-first.vercel.app/{owner}/{repo} to find the first commit of a repository.
+Go to https://git-first-commit.vercel.app/{owner}/{repo} to find the first commit of a repository.
 
 Or use the CLI:
 
