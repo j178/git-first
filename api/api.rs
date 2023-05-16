@@ -2,7 +2,6 @@ use anyhow::Result;
 use log::info;
 use octocrab::OctocrabBuilder;
 use redis::AsyncCommands;
-use url::Url;
 use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
 
 use git_first::get_first_commit;
@@ -26,10 +25,7 @@ async fn main() -> Result<(), Error> {
 }
 
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
-    info!("Request: {:?}", req);
-
-    let url = Url::parse(&req.uri().to_string())?;
-    let paths: Vec<&str> = url.path().trim_matches('/').split('/').collect();
+    let paths: Vec<&str> = req.uri().path().trim_matches('/').split('/').collect();
     if paths.len() != 2 {
         return Ok(Response::builder()
             .status(StatusCode::BAD_REQUEST)
