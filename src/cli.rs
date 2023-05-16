@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use octocrab::OctocrabBuilder;
 
 use git_first::get_first_commit;
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     let (owner, repo) = (full_name[0], full_name[1]);
 
     let crab = OctocrabBuilder::new()
-        .personal_token(std::env::var("GITHUB_TOKEN").unwrap())
+        .personal_token(std::env::var("GITHUB_TOKEN").context("GITHUB_TOKEN not set")?)
         .build()
         .unwrap();
 
