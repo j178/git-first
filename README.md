@@ -7,6 +7,6 @@ Go to https://git-first-commit.vercel.app/{owner}/{repo} to find the first commi
 Or use the CLI:
 
 ```bash
-cargo install --git https://github.com/j178/git-first git-first
-./git-first rust-lang rust
+cargo install --git https://github.com/j178/git-first git-first --locked
+./git-first rust-lang/rust
 ```
