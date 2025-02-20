@@ -349,6 +349,15 @@
                 updatePreview();
             });
         });
+
+        // Add form submission handling
+        [ownerInput, repoInput].forEach(input => {
+            input.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter' && !jumpButton.disabled) {
+                    jumpButton.click();
+                }
+            });
+        });
     </script>
 </body>
 </html> 
