@@ -25,7 +25,17 @@ async fn main() -> Result<(), Error> {
 }
 
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
-    let paths: Vec<&str> = req.uri().path().trim_matches('/').split('/').collect();
+    let path = req.uri().path().trim_matches('/');
+
+    // Serve index page at root path
+    if path.is_empty() {
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/html; charset=utf-8")
+            .body(Body::from(include_str!("index.html")))?);
+    }
+
+    let paths: Vec<&str> = path.split('/').collect();
     if paths.len() != 2 {
         return Ok(Response::builder()
             .status(StatusCode::BAD_REQUEST)
@@ -39,14 +49,16 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     let cache_key = format!("{}/{}", owner, repo);
 
     let kv_url = std::env::var("KV_URL")?.replace("redis://", "rediss://");
-    let mut redis_conn = redis::Client::open(kv_url)?.get_async_connection().await?;
+    let mut redis_conn = redis::Client::open(kv_url)?
+        .get_multiplexed_async_connection()
+        .await?;
 
     if let Ok(first_commit_url) = redis_conn.get::<_, String>(&cache_key).await {
         info!("Cache hit: {}", &cache_key);
         return Ok(Response::builder()
             .status(StatusCode::MOVED_PERMANENTLY)
             .header("Location", first_commit_url)
-            .body(().into())?);
+            .body(Body::Empty)?);
     }
 
     info!("Cache miss: {}", &cache_key);
@@ -56,10 +68,10 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     let first_commit_url = get_first_commit(&crab, owner, repo).await?;
 
-    redis_conn.set(&cache_key, &first_commit_url).await?;
+    let _: () = redis_conn.set(&cache_key, &first_commit_url).await?;
 
     Ok(Response::builder()
         .status(StatusCode::MOVED_PERMANENTLY)
         .header("Location", &first_commit_url)
-        .body(().into())?)
+        .body(Body::Empty)?)
 }
