@@ -53,10 +53,23 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
         .get_multiplexed_async_connection()
         .await?;
 
+    let is_xhr = req
+        .headers()
+        .get("X-Requested-With")
+        .is_some_and(|v| v == "XMLHttpRequest");
+
     if let Ok(first_commit_url) = redis_conn.get::<_, String>(&cache_key).await {
         info!("Cache hit: {}", &cache_key);
+
+        if is_xhr {
+            return Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/json")
+                .body(Body::from(format!("{{\"url\":\"{}\"}}", first_commit_url)))?);
+        }
+
         return Ok(Response::builder()
-            .status(StatusCode::MOVED_PERMANENTLY)
+            .status(StatusCode::FOUND)
             .header("Location", first_commit_url)
             .body(Body::Empty)?);
     }
@@ -70,8 +83,15 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     let _: () = redis_conn.set(&cache_key, &first_commit_url).await?;
 
+    if is_xhr {
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!("{{\"url\":\"{}\"}}", first_commit_url)))?);
+    }
+
     Ok(Response::builder()
-        .status(StatusCode::MOVED_PERMANENTLY)
+        .status(StatusCode::FOUND)
         .header("Location", &first_commit_url)
         .body(Body::Empty)?)
 }
