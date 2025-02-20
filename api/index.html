@@ -202,6 +202,24 @@
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .loading-bar {
+            display: none;
+            width: 100%;
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 16px;
+        }
+        .loading-bar-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #4299e1, #667eea);
+            animation: loadingBarFill 1.5s ease-out infinite;
+        }
+        @keyframes loadingBarFill {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
     </style>
 </head>
 <body>
@@ -237,24 +255,45 @@
         </div>
     </div>
 
+    <div class="loading-bar" id="loadingBar">
+        <div class="loading-bar-fill"></div>
+    </div>
+
     <script>
         const ownerInput = document.getElementById('owner');
         const repoInput = document.getElementById('repo');
         const preview = document.getElementById('preview');
         const jumpButton = document.getElementById('jumpButton');
         const errorMessage = document.getElementById('errorMessage');
+        const loadingBar = document.getElementById('loadingBar');
 
         function updatePreview() {
             const owner = ownerInput.value.trim();
             const repo = repoInput.value.trim();
             preview.textContent = `https://git-first-commit.vercel.app/${owner || '{owner}'}/${repo || '{repo}'}`;
             jumpButton.disabled = !owner || !repo;
+            jumpButton.textContent = 'Jump to the first commit';
             errorMessage.style.display = 'none';
+            loadingBar.style.display = 'none';
         }
 
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
+            loadingBar.style.display = 'none';
+        }
+
+        function startLoading() {
+            jumpButton.disabled = true;
+            jumpButton.textContent = 'Loading...';
+            loadingBar.style.display = 'block';
+        }
+
+        function showRedirecting(url) {
+            // Extract the last part of the URL for display
+            const displayUrl = url.split('/').slice(-1)[0].substring(0, 7);
+            jumpButton.textContent = `Redirecting to ${displayUrl}...`;
+            loadingBar.style.display = 'block';
         }
 
         ownerInput.addEventListener('input', updatePreview);
@@ -288,15 +327,14 @@
             const repo = repoInput.value.trim();
             if (owner && repo) {
                 try {
-                    jumpButton.disabled = true;
-                    jumpButton.textContent = 'Loading...';
+                    startLoading();
                     const commitUrl = await getFirstCommitUrl(owner, repo);
                     if (commitUrl) {
+                        showRedirecting(commitUrl);
                         window.location.href = commitUrl;
                     }
                 } catch (error) {
                     showError(error.message);
-                } finally {
                     jumpButton.disabled = false;
                     jumpButton.textContent = 'Jump to the first commit';
                 }
