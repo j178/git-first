@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::info;
+use log::{error, info};
 use octocrab::OctocrabBuilder;
 use redis::AsyncCommands;
 use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
@@ -45,33 +45,56 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
             ))?);
     }
 
-    let (owner, repo) = (paths[paths.len() - 2], paths[paths.len() - 1]);
-    let cache_key = format!("{}/{}", owner, repo);
-
-    let kv_url = std::env::var("KV_URL")?.replace("redis://", "rediss://");
-    let mut redis_conn = redis::Client::open(kv_url)?
-        .get_multiplexed_async_connection()
-        .await?;
-
     let is_xhr = req
         .headers()
         .get("X-Requested-With")
         .is_some_and(|v| v == "XMLHttpRequest");
 
-    if let Ok(first_commit_url) = redis_conn.get::<_, String>(&cache_key).await {
-        info!("Cache hit: {}", &cache_key);
+    let (owner, repo) = (paths[paths.len() - 2], paths[paths.len() - 1]);
+    let cache_key = format!("{}/{}", owner, repo);
 
+    let kv_url = std::env::var("KV_URL")?.replace("redis://", "rediss://");
+
+    // Create Redis connection once
+    let mut redis_conn = match redis::Client::open(kv_url)?
+        .get_multiplexed_async_connection()
+        .await
+    {
+        Ok(conn) => Some(conn),
+        Err(e) => {
+            error!("Redis connection error: {}", e);
+            None
+        }
+    };
+
+    // Try Redis cache lookup if connection is available
+    let cached_url = if let Some(conn) = redis_conn.as_mut() {
+        match conn.get::<_, String>(&cache_key).await {
+            Ok(url) => {
+                info!("Cache hit: {}", &cache_key);
+                Some(url)
+            }
+            Err(e) => {
+                error!("Redis get error: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    if let Some(first_commit_url) = cached_url {
         if is_xhr {
             return Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
                 .body(Body::from(format!("{{\"url\":\"{}\"}}", first_commit_url)))?);
+        } else {
+            return Ok(Response::builder()
+                .status(StatusCode::FOUND)
+                .header("Location", first_commit_url)
+                .body(Body::Empty)?);
         }
-
-        return Ok(Response::builder()
-            .status(StatusCode::FOUND)
-            .header("Location", first_commit_url)
-            .body(Body::Empty)?);
     }
 
     info!("Cache miss: {}", &cache_key);
@@ -81,7 +104,12 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     let first_commit_url = get_first_commit(&crab, owner, repo).await?;
 
-    let _: () = redis_conn.set(&cache_key, &first_commit_url).await?;
+    // Try to cache the result using the existing connection
+    if let Some(mut conn) = redis_conn {
+        if let Err(e) = conn.set::<_, _, ()>(&cache_key, &first_commit_url).await {
+            error!("Failed to cache result: {}", e);
+        }
+    }
 
     if is_xhr {
         return Ok(Response::builder()
