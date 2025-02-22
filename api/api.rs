@@ -55,6 +55,10 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     let kv_url = std::env::var("KV_URL")?.replace("redis://", "rediss://");
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Create Redis connection once
     let mut redis_conn = match redis::Client::open(kv_url)?
         .get_multiplexed_async_connection()
